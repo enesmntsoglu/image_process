@@ -1,0 +1,501 @@
+#include <TimerOne.h>
+#include <SoftwareSerial.h>
+
+#define enable   2   // motor pin
+#define stepPin  3
+#define dirPin   4
+
+#define enable_2   5
+#define stepPin_2  6
+#define dirPin_2   7
+
+#define sw1_r 8
+#define sw1_l 9  // çalışıyor
+#define sw2_r 10
+#define sw2_l 11 // çalışıyor
+
+bool  lim1_r;
+bool  lim1_l;
+bool  lim2_r;
+bool  lim2_l;
+
+#define cam  12 //kamera kontrol pini
+
+bool stop = false;
+
+int motordir =0;    //motor yönü için "snakemove" fonksiyonu içinde kullanılan değişken
+
+double stepdist = 0.039975; //motorun bir adımda kattettiği mesafe şu anda kullanılan vida için
+
+int accelerationSteps;
+int decelerationSteps;
+
+bool ciro = false;
+
+  
+int i = 1;
+int j = 1;
+int speed = 50; // motor hızı azaldıkça hız artar
+
+int homing_speed = 50;
+
+int cont_j = 0;
+int cont_i = 0;
+int cont_k = 0;
+bool home = false;
+int kalan_horizontal = 0;
+
+int kalanvertical;
+
+String receivedData;  // Gelen veriyi saklamak için bir string
+String dataArray[8];  // Verileri saklayacağımız dizi (Mesafe, Yatay, Dikey, Gecikme)
+
+String planstring, diststring, horizostring, verticstring, timestring, repeatstring,speedstring,camdelaystring;
+unsigned long plan, distance, horizontal, vertical, time, repeat,camdelay;
+int way;
+
+int lim_ver = 0;
+int lim_horiz = 0;
+
+unsigned long backhoriz, backvertic;
+int backmotordir;
+char c;
+
+/*
+  6400 stepte kullanım her bir adım --0.05625-- derece
+  her bir derece kullandığımız vidada ilerlenecek yol --0.0399375-- mikrometre
+*/
+
+void setup() {
+  Serial.begin(9600);
+
+  //sistem giriş çıkışlarını belirleme
+  pinMode(dirPin,OUTPUT);
+  pinMode(stepPin,OUTPUT);
+  pinMode(enable,OUTPUT);
+  pinMode(dirPin_2,OUTPUT);
+  pinMode(stepPin_2,OUTPUT);
+  pinMode(enable_2,OUTPUT);
+  
+  pinMode(cam,OUTPUT);
+
+  pinMode(sw1_r,INPUT_PULLUP);
+  pinMode(sw1_l,INPUT_PULLUP);
+  pinMode(sw2_r,INPUT_PULLUP);
+  pinMode(sw2_l,INPUT_PULLUP);
+
+  Timer1.initialize(50);
+  Timer1.attachInterrupt(switchread);
+  
+  //delay(1000);
+  //homing();
+  //delay(1000);
+
+}
+  
+
+void loop() {
+
+  if(Serial.available() > 0)
+  {
+    receivedData = Serial.readStringUntil('\n');
+    parseData(receivedData);
+    arayuzmove();
+  }
+}
+
+void homing(){
+  home = true;
+  lim1_r = digitalRead(sw1_r);
+  lim2_r = digitalRead(sw2_r);
+
+  if(lim1_r == true)
+  {
+    while(lim1_r == true)
+    {
+      lim1_r = digitalRead(sw1_r);
+      drive(homing_speed, 1, 1);
+    }
+  }
+  else lim_again(1);
+
+  if(lim2_r == true)
+  {
+    while(lim2_r == true){
+      lim2_r = digitalRead(sw2_r);
+      drive(homing_speed, 1, 2);
+    }
+  }
+  else lim_again(2);
+
+  distancedrive(6000,1,0);
+  distancedrive(6000,2,0);
+  home = false;
+}
+
+void drivestep(int k, int motor, unsigned long step){
+
+  for(unsigned long i = 0; i < step; i++){
+
+    if(motor == 1){
+      if(k == 0){
+        digitalWrite(dirPin, HIGH);
+        motor_1(speed);
+      }else if(k == 1){
+        digitalWrite(dirPin, LOW);
+        motor_1(speed);
+      }else{
+        digitalWrite(enable, HIGH);
+      }
+    }else if(motor == 2){
+      if(k == 0){
+        digitalWrite(dirPin_2, HIGH);
+        motor_2(speed);
+      }else if(k == 1){
+        digitalWrite(dirPin_2, LOW);
+        motor_2(speed);
+      }else{
+        digitalWrite(enable_2, HIGH);
+      }
+    }
+    
+  }  
+
+}
+
+//motor sürme fonksiyonu
+void drive(int time, int k, int motor){
+  
+  if(motor == 1){
+    if(k == 0){
+      digitalWrite(dirPin, HIGH);
+      motor_1(speed);
+    }else if(k == 1){
+      digitalWrite(dirPin, LOW);
+      motor_1(speed);
+    }else{
+      digitalWrite(enable, HIGH);
+    }
+  }else if(motor == 2){
+    if(k == 0){
+      digitalWrite(dirPin_2, HIGH);
+      motor_2(speed);
+    }else if(k == 1){
+      digitalWrite(dirPin_2, LOW);
+      motor_2(speed);
+    }else{
+      digitalWrite(enable_2, HIGH);
+    }
+  }
+}
+
+//mesafeye göre mpotor sürme
+void distancedrive(int distance, int motor, int direction){
+  unsigned long step = distance/stepdist;
+  if(stop == false){
+    drivestep(direction,motor,step);
+  }else if(stop){
+    drivesteplim(direction,motor,step);
+    //ciro = true;
+    stop = false;
+  }
+}
+
+//motor sürme komutu en temel komut
+void motor_1(int time){
+  digitalWrite(stepPin, HIGH);
+  delayMicroseconds(time);
+  digitalWrite(stepPin, LOW);
+  delayMicroseconds(time);
+}
+
+void motor_2(int time){
+  digitalWrite(stepPin_2, HIGH);
+  delayMicroseconds(time);
+  digitalWrite(stepPin_2, LOW);
+  delayMicroseconds(time); 
+}
+
+void snakemove(unsigned long horizontal,unsigned long vertical,unsigned long distance, unsigned long time, unsigned long repeat, unsigned long cam_delay, unsigned long stop_durum){
+  
+  unsigned long step = distance/stepdist;
+  
+
+  backhoriz = step*(horizontal-1);
+  backvertic = step*(vertical-1);
+
+  if (vertical % 2 == 0) {
+    backmotordir = 0;
+  } else{
+    backmotordir = 1;
+  }
+
+  for(int k = 0;k < repeat;k++){
+    
+    motordir = 0;
+    delay(5);
+    digitalWrite(cam, HIGH);
+    delay(time);
+    digitalWrite(cam, LOW);
+    delay(cam_delay);
+
+    for(; i<=vertical; i++){
+      
+      if(motordir == 0){
+        motordir = 1;
+      }else if(motordir == 1){
+        motordir = 0;
+      }
+
+      for(; j<horizontal; j++){
+       
+        distancedrive(distance,2,motordir);
+        delay(5); // cam delay çalışmıyor
+        digitalWrite(cam, HIGH);
+        delay(time);
+        digitalWrite(cam, LOW);
+        delay(cam_delay);
+        
+      }
+      
+      j = 1;
+      if(i<vertical & ciro == false){
+        distancedrive(distance, 1, 1);
+        delay(5);
+        digitalWrite(cam, HIGH);
+        delay(time);
+        digitalWrite(cam, LOW);
+        delay(cam_delay);
+      }
+      
+      kalanvertical = vertical-i;
+    }
+    i = 1;
+    if(ciro == false){
+      backloc();
+    }
+    
+    
+  }
+
+  ciro = false;
+
+}
+
+//bilgisayardan gelen datayı ayırma ve değişkenlere kaydetme
+void parseData(String data){
+  int firstComma = data.indexOf(',');           // İlk virgülün yeri
+  int secondComma = data.indexOf(',', firstComma + 1);  // İkinci virgülün yeri
+  int thirdComma = data.indexOf(',', secondComma + 1);  // Üçüncü virgülün yeri
+  int fourthComma = data.indexOf(',', thirdComma + 1);
+  int fifthComma = data.indexOf(',', fourthComma + 1);
+  int sixthComma = data.indexOf(',', fifthComma + 1);
+  int seventhComma = data.indexOf(',', sixthComma + 1);
+
+  // Verileri diziye kaydet
+  dataArray[0] = data.substring(0, firstComma);         //
+  dataArray[1] = data.substring(firstComma + 1, secondComma); //distance
+  dataArray[2] = data.substring(secondComma + 1, thirdComma); //horizontal
+  dataArray[3] = data.substring(thirdComma + 1,fourthComma);   //vertical      
+  dataArray[4] = data.substring(fourthComma + 1,fifthComma); //delay
+  dataArray[5] = data.substring(fifthComma +1,sixthComma); //repeat
+  dataArray[6] = data.substring(sixthComma + 1,seventhComma);//motor hızı
+  dataArray[7] = data.substring(seventhComma +1);//cam_delay
+
+  planstring = dataArray[0];
+  diststring = dataArray[1];
+  horizostring = dataArray[2];
+  verticstring = dataArray[3];
+  timestring = dataArray[4];
+  repeatstring = dataArray[5];
+  speedstring = dataArray[6];
+  camdelaystring = dataArray[7];
+
+
+  plan = planstring.toInt();
+  if(plan == 0){
+    distance = diststring.toInt();
+    horizontal = horizostring.toInt();
+    vertical = verticstring.toInt();
+    time = timestring.toInt();
+    repeat = repeatstring.toInt();
+    speed = speedstring.toInt();
+    camdelay = camdelaystring.toInt();
+  }else if(plan == 1){
+    distance = diststring.toInt();
+    way = horizostring.toInt();
+    speed = speedstring.toInt();
+   
+  }else{
+    distance = diststring.toInt();
+    horizontal = horizostring.toInt();
+    vertical = verticstring.toInt();
+    time = timestring.toInt();
+  }
+}
+
+//gelen veriye göre hareket etme
+void arayuzmove(){
+  switch (plan){
+    case 0:
+      delay(500);
+      snakemove(horizontal,vertical,distance,time,repeat,camdelay,0);
+    break;
+
+    case 1:
+      switch (way) {
+        case 8:
+          distancedrive(distance, 2, 1); //yukarı 8 motor2 yön1
+        break;
+
+        case 2:
+          distancedrive(distance, 2, 0); //asagi 2 motor2 yön0
+        break;
+
+        case 4:
+          distancedrive(distance, 1, 0); // sol 4 motor1 yön0;
+        break;
+
+        case 6:
+          distancedrive(distance, 1, 1); //sağ 6  motor2 yön1
+        break;
+      }
+    break;
+
+    case 2:
+      digitalWrite(cam,HIGH);
+    break;
+
+    case 3:
+      digitalWrite(cam,LOW);
+    break;
+
+    case 11:
+      kalan_horizontal = horizontal-cont_j-1;
+      kalanvertical = vertical-cont_i-1;
+      repeat = repeat-cont_k;
+      snakemove(horizontal,vertical,distance,time,repeat,camdelay,1);
+    break;
+
+    case 6:
+      dist_homing();
+    break;
+
+    case 7:
+      homing();
+    break;
+
+  }
+}
+
+//restart butonu sonrası çalışma
+void backloc(){
+
+  delay(500);
+  if(backmotordir==1){
+    drivestep(0, 2, backhoriz);
+    drivestep(0, 1, backvertic);
+  }else{
+    drivestep(0, 1, backvertic);
+  }
+}
+
+void lim_again(int motor){
+  if(motor == 1){
+    distancedrive(500,1,2);
+    homing();
+  }else if(motor == 2){
+    distancedrive(500,2,2);
+    homing();
+  }
+}
+
+void switchread(){
+  if(home == false){
+    lim1_r = digitalRead(sw1_r);
+    lim1_l = digitalRead(sw1_l);
+    lim2_r = digitalRead(sw2_r);
+    lim2_l = digitalRead(sw2_l);
+
+    if(lim1_r == false){
+      limit(1);
+    }else if(lim1_l == false){
+      limit(2);
+    }else if(lim2_r == false){
+      limit(3);
+    }else if(lim2_l == false){
+      limit(4);
+    }else{
+      stop = false;
+    }
+  }
+}
+
+void limit(int line){
+  stop = true;
+  //ciro = true;
+  if(line == 1){
+    distancedrive(100,1,0);
+    lim_ver = lim_ver - 100;
+  }else if(line == 2){
+    distancedrive(100,1,1);
+    lim_ver = lim_ver + 100;
+  }else if(line == 3){
+    distancedrive(100,2,0);
+    lim_horiz = lim_horiz - 100;
+  }else if(line == 4){
+    distancedrive(100,2,1);
+    lim_horiz = lim_horiz + 100;
+  }
+  
+}
+
+void drivesteplim(int k, int motor, unsigned long step){
+  for(unsigned long i = 0; i < step; i++){
+    if(motor == 1){
+      if(k == 0){
+        digitalWrite(dirPin, HIGH);
+        motor_1(speed);
+      }else if(k == 1){
+        digitalWrite(dirPin, LOW);
+        motor_1(speed);
+      }else{
+        digitalWrite(enable, HIGH);
+      }
+    }else if(motor == 2){
+      if(k == 0){
+        digitalWrite(dirPin_2, HIGH);
+        motor_2(speed);
+      }else if(k == 1){
+        digitalWrite(dirPin_2, LOW);
+        motor_2(speed);
+      }else{
+        digitalWrite(enable_2, HIGH);
+      }
+    } 
+  }
+}
+
+void dist_homing(){
+  switch(distance){
+    case 1:
+      distancedrive(horizontal,2,0);
+      distancedrive(vertical,1,0);
+    break;
+
+    case 2:
+      distancedrive(horizontal,2,0);
+      distancedrive(vertical,1,1);
+    break;
+    
+    case 3:
+      distancedrive(horizontal,2,1);
+      distancedrive(vertical,1,1);
+    break;
+    
+    case 4:
+      distancedrive(horizontal,2,1);
+      distancedrive(vertical,1,0);
+    break;
+  }
+}

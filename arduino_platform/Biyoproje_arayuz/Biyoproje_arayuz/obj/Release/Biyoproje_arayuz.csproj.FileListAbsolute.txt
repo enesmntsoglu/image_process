@@ -1,0 +1,14 @@
+C:\Users\esada\source\repos\Biyoproje_arayuz\Biyoproje_arayuz\bin\Release\Biyoproje_arayuz.exe.config
+C:\Users\esada\source\repos\Biyoproje_arayuz\Biyoproje_arayuz\bin\Release\Biyoproje_arayuz.exe
+C:\Users\esada\source\repos\Biyoproje_arayuz\Biyoproje_arayuz\bin\Release\Biyoproje_arayuz.pdb
+C:\Users\esada\source\repos\Biyoproje_arayuz\Biyoproje_arayuz\obj\Release\Biyoproje_arayuz.csproj.AssemblyReference.cache
+C:\Users\esada\source\repos\Biyoproje_arayuz\Biyoproje_arayuz\obj\Release\Biyoproje_arayuz.Form1.resources
+C:\Users\esada\source\repos\Biyoproje_arayuz\Biyoproje_arayuz\obj\Release\Biyoproje_arayuz.Properties.Resources.resources
+C:\Users\esada\source\repos\Biyoproje_arayuz\Biyoproje_arayuz\obj\Release\Biyoproje_arayuz.csproj.GenerateResource.cache
+C:\Users\esada\source\repos\Biyoproje_arayuz\Biyoproje_arayuz\obj\Release\Biyoproje_arayuz.csproj.CoreCompileInputs.cache
+C:\Users\esada\source\repos\Biyoproje_arayuz\Biyoproje_arayuz\obj\Release\Biyoproje_arayuz.exe
+C:\Users\esada\source\repos\Biyoproje_arayuz\Biyoproje_arayuz\obj\Release\Biyoproje_arayuz.pdb
+C:\Users\esada\source\repos\Biyoproje_arayuz\Biyoproje_arayuz\bin\Release\Biyoproje_arayuz.exe.manifest
+C:\Users\esada\source\repos\Biyoproje_arayuz\Biyoproje_arayuz\bin\Release\Biyoproje_arayuz.application
+C:\Users\esada\source\repos\Biyoproje_arayuz\Biyoproje_arayuz\obj\Release\Biyoproje_arayuz.exe.manifest
+C:\Users\esada\source\repos\Biyoproje_arayuz\Biyoproje_arayuz\obj\Release\Biyoproje_arayuz.application
